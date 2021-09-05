@@ -20,7 +20,7 @@
 `define INST_J     7'b1101111
 `define INST_AP    7'b0010111
 `define INST_LI    7'b0110111
-`define INST_LSY   7'b1111111
+`define INST_LSY   7'b1111011
 // `define INST_JR    7'b1100111 
 
 `define ARITH      5'b10000
