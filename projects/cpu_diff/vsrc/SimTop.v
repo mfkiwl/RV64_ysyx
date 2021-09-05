@@ -1,4 +1,5 @@
 
+/* verilator lint_off PINMISSING */
 //--xuezhen--
 
 `include "defines.v"
@@ -12,7 +13,6 @@ module SimTop(
     input  [63:0] io_logCtrl_log_level,
     input         io_perfInfo_clean,
     input         io_perfInfo_dump,
-
     output        io_uart_out_valid,
     output [7:0]  io_uart_out_ch,
     output        io_uart_in_valid,
@@ -22,8 +22,15 @@ module SimTop(
 // if_stage
 wire [63 : 0] pc;
 wire [31 : 0] inst;
+// exe_stage -> if_stage
+wire [63 : 0]pc_jump;
+wire [63 : 0]mem_w_data;
+wire [63 : 0]mem_r_data;
 
-// id_stage
+// id_stage -> if_stage
+wire mem_w_ena;
+wire inst_j_en;
+wire inst_jr_en;
 // id_stage -> regfile
 wire rs1_r_ena;
 wire [4 : 0]rs1_r_addr;
@@ -36,7 +43,8 @@ wire [4 : 0]inst_type;
 wire [7 : 0]inst_opcode;
 wire [`REG_BUS]op1;
 wire [`REG_BUS]op2;
-
+// id_stage -> ram
+wire mem_r_ena;
 // regfile -> id_stage
 wire [`REG_BUS] r_data1;
 wire [`REG_BUS] r_data2;
@@ -49,42 +57,72 @@ wire [4 : 0]inst_type_o;
 // exe_stage -> regfile
 wire [`REG_BUS]rd_data;
 
+wire i_skip;
+
+
+
 
 if_stage If_stage(
   .clk                (clock),
   .rst                (reset),
-  
+  .inst_j_en          (inst_j_en),
+  .inst_jr_en         (inst_jr_en),
+  .pc_jump            (pc_jump),
+  .op1                (op1),
   .pc                 (pc),
   .inst               (inst)
 );
 
 id_stage Id_stage(
   .rst                (reset),
+  .clk                (clock),
   .inst               (inst),
   .rs1_data           (r_data1),
   .rs2_data           (r_data2),
-  
+  .inst_j_en          (inst_j_en),
+  .inst_jr_en         (inst_jr_en),
   .rs1_r_ena          (rs1_r_ena),
   .rs1_r_addr         (rs1_r_addr),
   .rs2_r_ena          (rs2_r_ena),
   .rs2_r_addr         (rs2_r_addr),
   .rd_w_ena           (rd_w_ena),
   .rd_w_addr          (rd_w_addr),
+  .mem_w_ena          (mem_w_ena),
+  .mem_r_ena          (mem_r_ena),
   .inst_type          (inst_type),
   .inst_opcode        (inst_opcode),
   .op1                (op1),
-  .op2                (op2)
+  .op2                (op2),
+  .i_skip             (i_skip)
 );
 
 exe_stage Exe_stage(
   .rst                (reset),
+  .clk                (clock),
   .inst_type_i        (inst_type),
   .inst_opcode        (inst_opcode),
   .op1                (op1),
   .op2                (op2),
-  
+  .mem_r_data         (mem_r_data),
+  .pc_if              (pc),
+  .inst_j_en          (inst_j_en),
   .inst_type_o        (inst_type_o),
-  .rd_data            (rd_data)
+  .rd_data            (rd_data),
+  .mem_w_data         (mem_w_data),
+  .pc_exe             (pc_jump)
+);
+
+ram Ram(
+  .clk                (clock),
+  .rst                (reset),
+  .inst_opcode        (inst_opcode),
+  .mem_addr           (op1),
+  .mem_w_ena          (mem_w_ena),
+  .mem_w_data         (mem_w_data),
+  .pc                 (pc),
+  .inst               (inst),
+  .mem_r_ena          (mem_r_ena),
+  .mem_r_data         (mem_r_data) 
 );
 
 regfile Regfile(
@@ -148,7 +186,7 @@ DifftestInstrCommit DifftestInstrCommit(
   .valid              (cmt_valid),
   .pc                 (cmt_pc),
   .instr              (cmt_inst),
-  .skip               (0),
+  .skip               (i_skip),
   .isRVC              (0),
   .scFailed           (0),
   .wen                (cmt_wen),
@@ -206,7 +244,7 @@ DifftestTrapEvent DifftestTrapEvent(
 DifftestCSRState DifftestCSRState(
   .clock              (clock),
   .coreid             (0),
-  .priviledgeMode     (`RISCV_PRIV_MODE_M),
+  .priviledgeMode     (0),
   .mstatus            (0),
   .sstatus            (0),
   .mepc               (0),
